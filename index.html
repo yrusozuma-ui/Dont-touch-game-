@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080b0b">
+  <meta name="description" content="DON'T TOUCH: un juego arcade gratuito. Esquiva los bloques, sobrevive todo lo que puedas y supera tu récord.">
+  <meta name="robots" content="index,follow">
+  <title>DON'T TOUCH — Juego arcade gratis</title>
+  <style>
+    :root { color-scheme: dark; --bg:#080b0b; --panel:#111817; --mint:#9affc8; --muted:#8a9a93; --red:#ff5f72; }
+    * { box-sizing:border-box; }
+    html,body { margin:0; min-height:100%; background:var(--bg); color:#f3fff8; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
+    body { display:flex; justify-content:center; padding:16px 12px max(16px, env(safe-area-inset-bottom)); }
+    main { width:min(100%,520px); }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:4px 2px 14px; }
+    .brand { font-size:clamp(1.35rem,6vw,2rem); font-weight:900; letter-spacing:.09em; }
+    .brand span { color:var(--mint); }
+    .tag { color:var(--muted); font-size:.72rem; letter-spacing:.13em; }
+    .stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px; }
+    .stat { background:var(--panel); border:1px solid #23312b; border-radius:12px; padding:10px 8px; text-align:center; }
+    .stat small { display:block; color:var(--muted); font-size:.67rem; letter-spacing:.12em; margin-bottom:4px; }
+    .stat strong { font-size:1.18rem; font-variant-numeric:tabular-nums; }
+    .game-wrap { position:relative; overflow:hidden; border:1px solid #294137; border-radius:16px; background:#090e0d; box-shadow:0 0 34px #9affc80b; }
+    canvas { display:block; width:100%; aspect-ratio:9 / 13; touch-action:none; }
+    .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; background:#060a09df; }
+    .overlay.hidden { display:none; }
+    .overlay h1 { margin:0 0 8px; font-size:clamp(1.7rem,8vw,2.7rem); line-height:1; letter-spacing:.04em; }
+    .overlay h1 span { color:var(--mint); }
+    .overlay p { color:#b6c9bf; max-width:290px; line-height:1.5; font-size:.93rem; }
+    button { font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    .primary { border:0; border-radius:10px; padding:13px 24px; background:var(--mint); color:#07120c; font-weight:850; letter-spacing:.06em; min-width:150px; }
+    .secondary { border:1px solid #385348; border-radius:10px; padding:9px 14px; background:#101815; color:#effff5; font-weight:700; }
+    .control-row { display:grid; grid-template-columns:1fr auto 1fr; gap:10px; margin:10px 0; }
+    .move { height:58px; border-radius:13px; border:1px solid #2a4337; background:#111a16; color:var(--mint); font-size:1.45rem; font-weight:800; touch-action:manipulation; }
+    .move:active,.secondary:active { background:#1d3026; }
+    .pause { min-width:86px; }
+    .help { text-align:center; color:var(--muted); font-size:.8rem; line-height:1.55; margin:12px 8px 0; }
+    .footer { border-top:1px solid #1d2a24; margin-top:18px; padding-top:12px; text-align:center; color:#6e8077; font-size:.75rem; }
+    a { color:var(--mint); }
+    @media (min-height:850px) { body { align-items:center; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <div class="brand">DON'T <span>TOUCH</span></div>
+      <div class="tag">ARCADE SURVIVAL // 001</div>
+    </div>
+    <button id="pauseBtn" class="secondary pause" type="button" aria-label="Pausar juego">PAUSA</button>
+  </header>
+
+  <section class="stats" aria-label="Estadísticas">
+    <div class="stat"><small>PUNTOS</small><strong id="score">0</strong></div>
+    <div class="stat"><small>RÉCORD</small><strong id="best">0</strong></div>
+    <div class="stat"><small>NIVEL</small><strong id="level">1</strong></div>
+  </section>
+
+  <div class="game-wrap">
+    <canvas id="game" width="360" height="520" aria-label="Zona de juego: esquiva los obstáculos"></canvas>
+    <div id="overlay" class="overlay">
+      <h1 id="overlayTitle">DON'T <span>TOUCH</span></h1>
+      <p id="overlayText">Esquiva los bloques rojos. Aguanta todo lo que puedas y bate tu récord.</p>
+      <button id="startBtn" class="primary" type="button">JUGAR</button>
+    </div>
+  </div>
+
+  <div class="control-row">
+    <button id="leftBtn" class="move" type="button" aria-label="Mover a la izquierda">←</button>
+    <button id="centerBtn" class="secondary" type="button">CENTRAR</button>
+    <button id="rightBtn" class="move" type="button" aria-label="Mover a la derecha">→</button>
+  </div>
+  <p class="help">Usa ← y →, las teclas del teclado o los botones táctiles.<br>Cuanto más sobrevivas, más rápido caerán los obstáculos.</p>
+  <div class="footer">DON'T TOUCH · Juego gratuito hecho para navegador</div>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const scoreEl = document.getElementById("score");
+  const bestEl = document.getElementById("best");
+  const levelEl = document.getElementById("level");
+  const overlay = document.getElementById("overlay");
+  const overlayTitle = document.getElementById("overlayTitle");
+  const overlayText = document.getElementById("overlayText");
+  const startBtn = document.getElementById("startBtn");
+  const pauseBtn = document.getElementById("pauseBtn");
+  const W = canvas.width, H = canvas.height;
+  const player = { x: W / 2 - 13, y: H - 66, w: 26, h: 26, speed: 245 };
+  let obstacles = [], particles = [], score = 0, best = 0, level = 1;
+  let running = false, paused = false, ended = false;
+  let lastTime = 0, spawnTimer = 0, elapsed = 0;
+  const keys = { left:false, right:false };
+  try { best = Number(localStorage.getItem("dontTouchBest") || 0); } catch (_) {}
+  bestEl.textContent = best;
+
+  function reset() {
+    obstacles = []; particles = []; score = 0; level = 1; elapsed = 0; spawnTimer = 0;
+    player.x = W / 2 - player.w / 2;
+    scoreEl.textContent = "0"; levelEl.textContent = "1";
+    keys.left = keys.right = false;
+  }
+  function showOverlay(title, message, buttonText) {
+    overlayTitle.innerHTML = title;
+    overlayText.textContent = message;
+    startBtn.textContent = buttonText;
+    overlay.classList.remove("hidden");
+  }
+  function startGame() {
+    reset(); running = true; paused = false; ended = false; lastTime = performance.now();
+    overlay.classList.add("hidden"); pauseBtn.textContent = "PAUSA";
+    requestAnimationFrame(loop);
+  }
+  function endGame() {
+    running = false; ended = true; keys.left = keys.right = false;
+    if (score > best) {
+      best = score; bestEl.textContent = best;
+      try { localStorage.setItem("dontTouchBest", String(best)); } catch (_) {}
+    }
+    showOverlay("FIN DEL <span>JUEGO</span>", `Puntuación: ${score}. Récord: ${best}. ¿Puedes hacerlo mejor?`, "REINTENTAR");
+  }
+  function togglePause() {
+    if (!running && !paused) return;
+    if (paused) {
+      paused = false; running = true; lastTime = performance.now();
+      overlay.classList.add("hidden"); pauseBtn.textContent = "PAUSA";
+      requestAnimationFrame(loop);
+    } else {
+      paused = true; running = false; keys.left = keys.right = false;
+      showOverlay("JUEGO <span>PAUSADO</span>", "Respira. Cuando estés listo, continúa.", "CONTINUAR");
+      pauseBtn.textContent = "SEGUIR";
+    }
+  }
+  function spawnObstacle() {
+    const width = 22 + Math.random() * 35;
+    obstacles.push({ x: 8 + Math.random() * (W - width - 16), y: -28, w: width, h: 15 + Math.random() * 13, speed: 120 + level * 18 + Math.random() * 35 });
+  }
+  function hit(a,b) {
+    const inset = 3;
+    return a.x + inset < b.x + b.w && a.x + a.w - inset > b.x &&
+           a.y + inset < b.y + b.h && a.y + a.h - inset > b.y;
+  }
+  function burst(x,y) {
+    for (let i=0;i<18;i++) particles.push({x,y,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,life:.45});
+  }
+  function update(dt) {
+    elapsed += dt;
+    score = Math.floor(elapsed * 10);
+    level = 1 + Math.floor(elapsed / 12);
+    scoreEl.textContent = score; levelEl.textContent = level;
+    const move = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    player.x += move * player.speed * dt;
+    player.x = Math.max(5, Math.min(W - player.w - 5, player.x));
+    spawnTimer += dt;
+    const interval = Math.max(.27, .82 - level * .045);
+    if (spawnTimer >= interval) { spawnTimer = 0; spawnObstacle(); }
+    for (let i=obstacles.length-1;i>=0;i--) {
+      const o = obstacles[i]; o.y += (o.speed + level * 5) * dt;
+      if (hit(player,o)) { burst(player.x+player.w/2, player.y+player.h/2); endGame(); return; }
+      if (o.y > H + 30) obstacles.splice(i,1);
+    }
+    for (let i=particles.length-1;i>=0;i--) {
+      const p=particles[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt;
+      if(p.life<=0) particles.splice(i,1);
+    }
+  }
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle="#090e0d"; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle="#14241c"; ctx.lineWidth=1;
+    for(let x=0;x<W;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    ctx.fillStyle="#9affc8"; ctx.shadowColor="#9affc8"; ctx.shadowBlur=16;
+    ctx.fillRect(player.x,player.y,player.w,player.h); ctx.shadowBlur=0;
+    ctx.fillStyle="#ff5f72"; ctx.shadowColor="#ff5f72"; ctx.shadowBlur=10;
+    for(const o of obstacles) ctx.fillRect(o.x,o.y,o.w,o.h);
+    ctx.shadowBlur=0;
+    for(const p of particles){ctx.globalAlpha=Math.max(0,p.life/.45);ctx.fillStyle="#9affc8";ctx.fillRect(p.x,p.y,3,3);}
+    ctx.globalAlpha=1;
+    ctx.fillStyle="#9affc8";ctx.font="10px monospace";ctx.fillText("SURVIVE",12,18);
+    ctx.fillStyle="#53665b";ctx.fillText("LV."+level,W-42,18);
+  }
+  function loop(now) {
+    if (!running || paused) return;
+    const dt = Math.min((now-lastTime)/1000, .035); lastTime = now;
+    update(dt); draw();
+    if (running) requestAnimationFrame(loop);
+  }
+  function setKey(key, value) {
+    if(key==="ArrowLeft"||key==="a"||key==="A") keys.left=value;
+    if(key==="ArrowRight"||key==="d"||key==="D") keys.right=value;
+  }
+  window.addEventListener("keydown",e=>{
+    if(["ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+    setKey(e.key,true);
+    if(e.key==="Escape"||e.key===" ") togglePause();
+  });
+  window.addEventListener("keyup",e=>setKey(e.key,false));
+  function bindHold(id, direction) {
+    const el=document.getElementById(id);
+    const down=e=>{e.preventDefault();keys[direction]=true;};
+    const up=e=>{e.preventDefault();keys[direction]=false;};
+    el.addEventListener("pointerdown",down);
+    ["pointerup","pointercancel","pointerleave"].forEach(type=>el.addEventListener(type,up));
+  }
+  bindHold("leftBtn","left"); bindHold("rightBtn","right");
+  document.getElementById("centerBtn").addEventListener("click",()=>{player.x=W/2-player.w/2;});
+  startBtn.addEventListener("click",()=>{
+    if(paused && !ended){paused=false;running=true;lastTime=performance.now();overlay.classList.add("hidden");pauseBtn.textContent="PAUSA";requestAnimationFrame(loop);}
+    else startGame();
+  });
+  pauseBtn.addEventListener("click",togglePause);
+  canvas.addEventListener("pointerdown",e=>{
+    if(!running)return;
+    const rect=canvas.getBoundingClientRect();
+    const x=(e.clientX-rect.left)/rect.width*W;
+    player.x=x-player.w/2; player.x=Math.max(5,Math.min(W-player.w-5,player.x));
+  });
+  draw();
+})();
+</script>
+</body>
+</html>
